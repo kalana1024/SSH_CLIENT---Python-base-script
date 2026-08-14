@@ -295,7 +295,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # run
     p_run = sub.add_parser("run", help="Run a command on a single host")
-    p_run.add_argument("ip", help="SSH server IP/hostname")
+    p_run.add_argument("ip", nargs="?", default=None, help="SSH server IP/hostname (optional if using --profile)")
     p_run.add_argument("user", nargs="?", default=None, help="SSH username (optional if using --profile)")
     p_run.add_argument("--command", default="id", help="Command to execute (default: id)")
     p_run.add_argument("--dry-run", action="store_true", help="Validate args/connectivity plan without connecting")
@@ -328,7 +328,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # shell
     p_shell = sub.add_parser("shell", help="Open an interactive PTY shell on a host")
-    p_shell.add_argument("ip")
+    p_shell.add_argument("ip", nargs="?", default=None, help="SSH server IP/hostname (optional if using --profile)")
     p_shell.add_argument("user", nargs="?", default=None)
     _add_common_connection_args(p_shell)
     _add_common_logging_args(p_shell)
@@ -337,7 +337,7 @@ def build_parser() -> argparse.ArgumentParser:
     # sftp
     p_sftp = sub.add_parser("sftp", help="Upload/download files or directories")
     p_sftp.add_argument("action", choices=["upload", "download"])
-    p_sftp.add_argument("ip")
+    p_sftp.add_argument("ip", nargs="?", default=None, help="SSH server IP/hostname (optional if using --profile)")
     p_sftp.add_argument("user", nargs="?", default=None)
     p_sftp.add_argument("--local", required=True, help="Local file/directory path")
     p_sftp.add_argument("--remote", required=True, help="Remote file/directory path")
@@ -349,7 +349,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # script
     p_script = sub.add_parser("script", help="Run a multi-step playbook against a host")
-    p_script.add_argument("ip")
+    p_script.add_argument("ip", nargs="?", default=None, help="SSH server IP/hostname (optional if using --profile)")
     p_script.add_argument("user", nargs="?", default=None)
     p_script.add_argument("--playbook", required=True, help="YAML/JSON playbook file")
     _add_common_connection_args(p_script)
@@ -388,10 +388,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.subcommand in ("run", "shell", "sftp", "script"):
-        if not args.profile and args.user is None:
-            parser.error("USER is required unless --profile is given.")
-        if args.subcommand == "run" and not args.password and not args.key_file and not args.profile:
-            pass  # allowed: agent/default-key auth is valid and checked inside cmd_run
+        if not args.profile and (args.ip is None or args.user is None):
+            parser.error("IP and USER are required unless --profile is given.")
 
     return args.func(args)
 
