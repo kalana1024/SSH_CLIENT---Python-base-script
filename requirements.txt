@@ -1,0 +1,8 @@
+paramiko>=3.4
+
+# Optional but recommended - enables YAML inventories/playbooks, colorized
+# output, and the live TUI dashboard. Everything degrades gracefully to
+# plain text/JSON if these aren't installed.
+pyyaml>=6.0
+rich>=13.0
+textual>=0.50

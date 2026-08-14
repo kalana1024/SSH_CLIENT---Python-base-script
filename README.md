@@ -1,82 +1,108 @@
-Features:
+# bh_sshcmd
 
-SSH Command Execution:
+A fully-loaded SSH command/fleet automation toolkit built on [Paramiko](https://www.paramiko.org/). Started as a single-file "run one command on one host" script; now a small toolkit with six subcommands covering single-host execution, concurrent fleet runs, interactive shells, SFTP transfer, multi-step playbooks, and saved connection profiles.
 
-Executes a specified command on a remote SSH server and retrieves its stdout, stderr, and exit code.
+## Install
 
-Supports both password-based and key-based authentication.
+```bash
+pip install -r requirements.txt
+```
 
-Logging and Debugging:
+Only `paramiko` is required. `pyyaml`, `rich`, and `textual` are optional — install them for YAML inventories/playbooks, colorized output, and the live TUI dashboard respectively. Everything degrades gracefully to plain text/JSON if they're missing.
 
-Verbose logging (INFO level) for command execution and errors.
+Run via `python -m bh_sshcmd <subcommand> ...`, or `pip install -e .` for a `bh-sshcmd` console command.
 
-Hexdump logging (DEBUG level) for detailed binary output when enabled.
+## Subcommands
 
-Logs stdout and stderr of the executed command, with options to log them as hexadecimal for debugging.
+### `run` — single host, single command
 
-SSH Configuration:
+```bash
+python -m bh_sshcmd run 192.168.100.131 ubuntu --key-file ~/.ssh/id_ed25519 --command "df -h"
+python -m bh_sshcmd run 192.168.100.131 ubuntu --password mypass --command "ls -l" --stream
+python -m bh_sshcmd run 192.168.100.131 ubuntu --profile prod-web --command "uptime" --json
+python -m bh_sshcmd run 192.168.100.131 ubuntu --command "id" --parse   # structured output via plugins
+```
 
-Allows you to specify the SSH port (default is 22).
+Key flags: `--stream` (live output), `--json`, `--parse` (run through a plugin parser), `--dry-run`, `--retries`, `--jump-host user@bastion`, `--host-key-policy {auto,warn,reject}`, `--no-agent`, `--no-ssh-config`.
 
-Supports SSH timeout for command execution, with a default of 10 seconds.
+### `fleet` — the same command, many hosts, concurrently
 
-Authentication:
+```bash
+python -m bh_sshcmd fleet examples/inventory.yaml --command "uptime" --max-workers 20
+python -m bh_sshcmd fleet examples/inventory.txt --command "cat /etc/os-release" --diff   # group hosts by identical output
+python -m bh_sshcmd fleet examples/inventory.yaml --command "echo {alias}@{hostname}" --json
+python -m bh_sshcmd fleet examples/inventory.yaml --command "uname -a" --tui              # live dashboard (needs `textual`)
+```
 
-Can use either an SSH password (--password) or an SSH private key file (--key-file) for authentication.
+Inventories are YAML (list of `host`/`user`/`port`/`key_file`/`alias`/`password` dicts), CSV with the same columns, or a plain `user@host[:port]`-per-line text file. `--diff` is a config-drift tool: it buckets hosts by identical stdout so you can immediately see which machines disagree.
 
-Command Customization:
+### `shell` — interactive PTY
 
-The default command to execute is id, but you can specify any command with the --command option.
+```bash
+python -m bh_sshcmd shell 192.168.100.131 ubuntu --key-file ~/.ssh/id_ed25519
+```
 
-Logging to File:
+A real interactive terminal session (raw-mode PTY bridging on Linux/macOS; a line-buffered fallback on Windows), for sudo prompts, menus, or anything `exec_command` can't handle.
 
-Option to log output to a specified file (--log-file).
+### `sftp` — file/directory transfer
 
-Commands and Arguments:
+```bash
+python -m bh_sshcmd sftp upload 192.168.100.131 ubuntu --local ./build.tar.gz --remote /tmp/build.tar.gz --progress
+python -m bh_sshcmd sftp download 192.168.100.131 ubuntu --local ./backup --remote /var/backups --recursive
+```
 
-Basic Options:
+### `script` — multi-step playbooks
 
-ip: SSH server IP address (e.g., 192.168.100.131).
+```bash
+python -m bh_sshcmd script 192.168.100.131 ubuntu --playbook examples/playbook.yaml
+```
 
-user: SSH username.
+Runs a sequence of commands with conditional branching (`on_failure: stop|continue`) and variable capture (`register:` + `{{varname}}` substitution in later steps) — a mini Ansible for one host. See `examples/playbook.yaml`.
 
---password: SSH password for authentication.
+### `config` — saved connection profiles
 
---key-file: Path to SSH private key file for authentication.
+```bash
+python -m bh_sshcmd config add prod-web 192.168.100.131 ubuntu --key-file ~/.ssh/id_ed25519
+python -m bh_sshcmd config list
+python -m bh_sshcmd run --profile prod-web --command "systemctl status nginx"
+```
 
---command: Command to execute on the remote host (default is id).
+Profiles live in `~/.bh_sshcmd/config.yaml`. Passwords are **not** saved unless you pass `--save-password` explicitly (stored in plaintext — prefer keys or an agent).
 
---port: SSH server port (default is 22).
+## Everything else it does
 
---timeout: Command execution timeout in seconds (default is 10.0).
+- **SSH agent + `~/.ssh/config`** — auth falls back to your agent/default keys, and `Hostname`/`Port`/`User`/`IdentityFile`/`ProxyJump` are read from your SSH config automatically (`--no-agent`/`--no-ssh-config` to opt out).
+- **Jump host / bastion chaining** (`--jump-host user@bastion[:port]`) — tunnels the connection through an intermediate host via a real Paramiko `direct-tcpip` channel.
+- **Host-key policy control** — `auto` (trust-on-first-use, the old default, flagged as MITM-risky), `warn`, or `reject` (refuse unknown host keys outright).
+- **Retry/backoff** on connection failures (`--retries`).
+- **Live output streaming** (`--stream`) instead of waiting for the whole command to finish.
+- **Structured/JSON output** (`--json`) for piping into other tooling.
+- **Command templating** in fleet mode (`{hostname}`, `{user}`, `{alias}`).
+- **Plugin system** for parsing known command output (`id`, `uname`, `df`, `ss` built in) into structured dicts; drop your own parser modules in a directory and pass `--plugin-dir`.
+- **Diff mode** for fleets — spot config drift by grouping hosts with identical output.
+- **Live TUI dashboard** (`--tui`, needs `textual`) showing per-host status as a fleet run progresses.
+- **Hexdump debugging** (`--debug-hexdump`) for inspecting raw binary stdout/stderr.
+- **Logging to file** (`--log-file`) alongside console output.
 
-Logging Options:
+## Project layout
 
---verbose, -v: Enable verbose logging (INFO level).
+```
+bh_sshcmd/
+  core.py           SSHSession: connect (agent/ssh-config/jump-host/retry), exec_command, invoke_shell
+  fleet.py           concurrent multi-host runner + command templating
+  sftp_ops.py         upload/download, single file or recursive directory
+  script_runner.py     playbook loader + step runner (conditionals, variable capture)
+  config.py             saved profiles + inventory (YAML/CSV/txt) loading
+  plugins.py             output-parser registry + built-ins + external plugin loading
+  output.py                rich/plain table, JSON, diff-group, progress bar rendering
+  tui.py                     optional textual live dashboard
+  cli.py                      argparse subcommands, wires everything together
+examples/
+  inventory.yaml, inventory.txt, playbook.yaml
+```
 
---debug-hexdump: Enable hexdump for output debugging (DEBUG level).
+## Security notes
 
---log-file: Log output to the specified file.
-
-Authentication Requirements:
-
-Password or Key File: You must provide either --password or --key-file for authentication.
-
-Example Usage:
-
-Execute a command using password authentication:
-
-python3 ssh_client.py 192.168.100.131 user --password mypassword --command "ls -l"
-
-
-Execute a command using SSH key-based authentication:
-
-python3 ssh_client.py 192.168.100.131 user --key-file /path/to/keyfile --command "uptime"
-
-
-Enable verbose logging and hexdump for debugging:
-
-python3 ssh_client.py 192.168.100.131 user --password mypassword --command "df -h" --verbose --debug-hexdump
-
-
-This script provides a powerful SSH client with detailed logging and debugging options, making it ideal for secure remote command execution and troubleshooting.
+- Prefer `--key-file` or an SSH agent over `--password` — passwords on the command line land in shell history and process listings.
+- `--host-key-policy auto` (the default, for backwards compatibility) trusts unknown host keys automatically. For anything touching production, use `--host-key-policy reject` with a populated `known_hosts`, or at least `warn`.
+- `config add --save-password` stores the password in **plaintext** on disk — only use it in throwaway/lab environments.

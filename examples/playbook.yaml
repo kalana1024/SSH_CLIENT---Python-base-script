@@ -1,0 +1,16 @@
+# Example playbook for `bh-sshcmd script`. Steps run in order; a failed step
+# stops the playbook unless on_failure: continue is set. {{varname}} in a
+# later step is replaced with the stripped stdout of an earlier `register`ed
+# step.
+- command: "uname -a"
+  register: os_info
+  description: "Capture OS/kernel info"
+
+- command: "echo Detected: {{os_info}}"
+
+- command: "systemctl is-active nginx"
+  on_failure: continue
+  description: "Check nginx status without aborting the run"
+
+- command: "df -h /"
+  description: "Report root filesystem usage"

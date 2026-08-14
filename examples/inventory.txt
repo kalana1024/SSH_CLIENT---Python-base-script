@@ -1,0 +1,4 @@
+# One host per line: user@host[:port]
+ubuntu@192.168.100.11
+ubuntu@192.168.100.12
+admin@192.168.100.20:2222

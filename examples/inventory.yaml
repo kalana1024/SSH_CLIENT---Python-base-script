@@ -1,0 +1,12 @@
+- alias: web1
+  host: 192.168.100.11
+  user: ubuntu
+  key_file: ~/.ssh/id_ed25519
+- alias: web2
+  host: 192.168.100.12
+  user: ubuntu
+  key_file: ~/.ssh/id_ed25519
+- alias: db1
+  host: 192.168.100.20
+  user: admin
+  port: 2222
